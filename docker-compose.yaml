@@ -1,0 +1,127 @@
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: docker/airflow/Dockerfile
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-}
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_AIRFLOW_DB}
+    AIRFLOW__LOGGING__LOGGING_LEVEL: INFO
+    # --- consumed by weatherml/cli.py via the /opt/weatherml-venv interpreter, not by Airflow itself ---
+    WEATHERSTACK_API_KEY: ${WEATHERSTACK_API_KEY}
+    WEATHERSTACK_BASE_URL: ${WEATHERSTACK_BASE_URL}
+    USE_MOCK_CLIENT: ${USE_MOCK_CLIENT}
+    DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_APP_DB}
+    MLFLOW_TRACKING_URI: http://mlflow-server:5000
+    MLFLOW_DISABLE_AGENT_HINT: "1"
+    INGESTION_POLL_INTERVAL_MINUTES: ${INGESTION_POLL_INTERVAL_MINUTES:-5}
+    REQUEST_TIMEOUT_SECONDS: ${REQUEST_TIMEOUT_SECONDS:-10}
+    FEATURE_LOOKBACK_HOURS: ${FEATURE_LOOKBACK_HOURS:-24}
+    IMPROVEMENT_THRESHOLD: ${IMPROVEMENT_THRESHOLD:-0.02}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - airflow_logs:/opt/airflow/logs
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_APP_DB}
+      POSTGRES_AIRFLOW_DB: ${POSTGRES_AIRFLOW_DB}
+      POSTGRES_MLFLOW_DB: ${POSTGRES_MLFLOW_DB}
+    ports:
+      - "5434:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-multi-db.sh:/docker-entrypoint-initdb.d/init-multi-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mlflow-server:
+    build:
+      context: docker/mlflow
+    environment:
+      MLFLOW_BACKEND_STORE_URI: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_MLFLOW_DB}
+      MLFLOW_ARTIFACT_ROOT: /mlflow/artifacts
+    ports:
+      - "5001:5000"
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username "${AIRFLOW_ADMIN_USER}" \
+          --password "${AIRFLOW_ADMIN_PASSWORD}" \
+          --firstname admin --lastname admin \
+          --role Admin --email "${AIRFLOW_ADMIN_EMAIL}" || true
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8082:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_APP_DB}
+      MLFLOW_TRACKING_URI: http://mlflow-server:5000
+      MLFLOW_DISABLE_AGENT_HINT: "1"
+      MODEL_REFRESH_INTERVAL_SECONDS: ${MODEL_REFRESH_INTERVAL_SECONDS:-600}
+      WEATHERSTACK_API_KEY: ${WEATHERSTACK_API_KEY}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8811:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pg_data:
+  mlflow_artifacts:
+  airflow_logs:

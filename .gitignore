@@ -1,0 +1,45 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# uv
+uv.lock.tmp
+
+# MLflow / ML artifacts
+mlruns/
+mlartifacts/
+*.pkl
+*.joblib
+
+# Airflow
+airflow/logs/
+airflow/airflow.db
+airflow/airflow.cfg
+airflow/webserver_config.py
+airflow/standalone_admin_password.txt
+
+# Docker
+docker/postgres/data/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Claude / AI tool local state (account-wide plugin artifacts, not project state)
+.claude/
+.databricks/
+.gemini/
