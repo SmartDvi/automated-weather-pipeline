@@ -3,7 +3,7 @@
 A self-hosted pipeline that polls [weatherstack](https://weatherstack.com/) every 5 minutes for
 5 cities, engineers meteorological/health-risk features, trains short-term temperature forecasting
 models tracked in MLflow, and serves predictions over a FastAPI. Orchestrated end-to-end by
-Airflow.
+Airflow, with a read-only Dash dashboard for browsing ingested data and forecasts.
 
 ## Architecture
 
@@ -22,6 +22,9 @@ raw.weather_observations_raw  ──►  core.weather_observations  (Postgres, i
                                           │
                                           ▼
                               FastAPI (/predict, /observations, /health, /metrics)
+                                          │
+                                          ▼
+                              Dash dashboard (read-only, never calls weatherstack)
 
 ops.pipeline_runs / ops.data_quality_checks   ◄── every 15 min (Airflow: data_quality_monitoring)
 ```
@@ -121,6 +124,28 @@ Training is skipped (not run on too little data) below `MIN_TRAINING_ROWS` — s
 (Prometheus format). The model cache refreshes from the MLflow registry every
 `MODEL_REFRESH_INTERVAL_SECONDS` (default 600s) without restarting the process, and only swaps
 the in-memory model when the resolved `@production` version actually changed.
+
+## Dashboard
+
+A read-only Dash + Dash Mantine Components app (`src/weatherml/dashboard/`) for browsing ingested
+observations and forecasts. It only calls this project's own API — never weatherstack directly —
+so leaving it open, or setting a short `DASHBOARD_REFRESH_SECONDS`, never touches weatherstack
+quota; only Airflow's `ingest_weather` DAG does that.
+
+```bash
+uv sync --extra dashboard
+docker compose up -d postgres mlflow-server api   # or the full stack
+uv run python -m weatherml.dashboard.app
+```
+
+Dashboard: http://localhost:8050 (port / refresh interval / API base URL configurable via
+`DASHBOARD_PORT` / `DASHBOARD_REFRESH_SECONDS` / `DASHBOARD_API_BASE_URL` in `.env`).
+
+Per selected location, it shows current conditions, `/predict` forecasts for both horizons, a 24h
+temperature chart, and a "data insights" AG Grid table of recent observations enriched with
+`heat_index_c`, `dew_point_c`, `wind_chill_c`, `pressure_trend_3h`, and `storm_risk`. These are
+computed by calling the same functions in `weatherml/features/functions.py` used to build model
+training features (see `src/weatherml/dashboard/insights.py`) — not a reimplementation.
 
 ## Testing
 

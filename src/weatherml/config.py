@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
+    # Dashboard (talks to the API above over HTTP, never to weatherstack or
+    # Postgres directly — refreshing it doesn't touch API quota)
+    dashboard_api_base_url: str = "http://localhost:8811"
+    dashboard_port: int = 8050
+    dashboard_refresh_seconds: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:
