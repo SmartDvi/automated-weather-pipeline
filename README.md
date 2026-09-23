@@ -6,8 +6,8 @@ models tracked in MLflow, and serves predictions over a FastAPI. Orchestrated en
 Airflow, with a read-only Dash dashboard for browsing ingested data and forecasts.
 
 ## Architecture
+[Screencast from 2026-09-23 02-06-43.webm](https://github.com/user-attachments/assets/6096e1d6-7a77-4632-b8fb-d18e01a61170)
 
-```
 weatherstack API
       │  every 5 min (Airflow: ingest_weather)
       ▼
