@@ -1,6 +1,6 @@
 # WeatherML — Production Weather Ingestion, Feature Engineering & Forecasting
 
-A self-hosted pipeline that polls [weatherstack](https://weatherstack.com/) every 5 minutes for
+A self-hosted pipeline that polls [weatherstack](https://weatherstack.com/) once a day for
 5 cities, engineers meteorological/health-risk features, trains short-term temperature forecasting
 models tracked in MLflow, and serves predictions over a FastAPI. Orchestrated end-to-end by
 Airflow, with a read-only Dash dashboard for browsing ingested data and forecasts.
