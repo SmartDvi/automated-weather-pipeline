@@ -5,11 +5,15 @@ A self-hosted pipeline that polls [weatherstack](https://weatherstack.com/) once
 models tracked in MLflow, and serves predictions over a FastAPI. Orchestrated end-to-end by
 Airflow, with a read-only Dash dashboard for browsing ingested data and forecasts.
 
-## Architecture
+
 [Screencast from 2026-09-23 02-06-43.webm](https://github.com/user-attachments/assets/6096e1d6-7a77-4632-b8fb-d18e01a61170)
 
+
+
+
+## Architecture
 weatherstack API
-      │  every 5 min (Airflow: ingest_weather)
+      │  daily (Airflow: ingest_weather)
       ▼
 raw.weather_observations_raw  ──►  core.weather_observations  (Postgres, idempotent upsert)
                                           │  hourly (Airflow: feature_engineering)
